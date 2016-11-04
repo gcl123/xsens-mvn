@@ -12,6 +12,11 @@
 #include <xsens/xmecallback.h>
 #include <functional>
 
+#include <mutex>
+#include <condition_variable>
+#include <thread>
+#include <queue>
+
 class XmeControl;
 class XsensCallbackHandler;
 
@@ -21,38 +26,51 @@ namespace yarp {
     }
 }
 
-class yarp::dev::XsensMVN::XsensMVNPrivate
+ 
+class yarp::dev::XsensMVN::XsensMVNPrivate : public XmeCallback
 {
     XmeLicense m_license;
     XmeControl *m_connection;
-    XsensCallbackHandler *m_callback;
+
+    std::mutex m_mutex;
+    std::condition_variable m_initializationVariable;
+
+    //process data
+    struct FrameData {
+        XmePose pose;
+    };
+
+    std::thread m_processor;
+    bool m_stopProcessor;
+    std::mutex m_processorGuard;
+    std::condition_variable m_processorVariable;
+    std::queue<FrameData> m_frameData;
+    void processNewFrame();
+
+    //hardware scan
+    bool m_hardwareFound;
 
     XsensMVNPrivate(const XsensMVNPrivate&) = delete;
     XsensMVNPrivate& operator=(const XsensMVNPrivate&) = delete;
 
 public:
     XsensMVNPrivate();
-    ~XsensMVNPrivate();
+    virtual ~XsensMVNPrivate();
 
     bool init(yarp::os::Searchable&);
     bool fini();
 
-    void scanForDevice(std::function<void ()> callback);
+    bool startAcquisition();
+    bool stopAcquisition();
 
+
+    // callbacks
+    virtual void onHardwareReady(XmeControl* dev);
+    virtual void onHardwareError(XmeControl* dev);
+    virtual void onPoseReady(XmeControl* dev);
 
 };
 
-class XsensCallbackHandler : public XmeCallback {
-public:
-    volatile bool m_calibrationComplete;
-    volatile bool m_calibrationProcessed;
-    volatile bool m_calibrationAborted;
-
-    virtual ~XsensCallbackHandler();
-
-protected:
-   
-};
 
 
 #endif //XSENSMVNPRIVATE_h
